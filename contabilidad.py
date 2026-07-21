@@ -1,8 +1,10 @@
+# contabilidad.py
 import streamlit as st
 import pandas as pd
 import streamlit.components.v1 as components
 import base64
 import os
+from utilidades import check_permiso  # <-- INTEGRACIÓN DEL CANDADO DE SEGURIDAD
 
 class ModuloContabilidad:
     def __init__(self, db):
@@ -15,13 +17,16 @@ class ModuloContabilidad:
                 with open(path, "rb") as img:
                     return base64.b64encode(img.read()).decode('utf-8')
             return None
-        except:
+        except Exception:
             return None
 
     def generar_formato_impresion(self, titulo, datos):
         """Mantiene el formato original tipo recibo/voucher doble para transacciones individuales"""
         logo_b64 = self.get_image_base64(self.logo_path)
-        fecha = datos.get('fecha')[:10] if datos.get('fecha') else pd.Timestamp.now().strftime("%Y-%m-%d")
+        
+        fecha_raw = datos.get('fecha')
+        fecha = fecha_raw[:10] if isinstance(fecha_raw, str) else pd.Timestamp.now().strftime("%Y-%m-%d")
+        
         folio = datos.get('id', '000')
         sujeto = datos.get('cliente') or datos.get('descripcion') or datos.get('banco') or "S/N"
         monto = float(datos.get('total') or datos.get('monto') or 0)
@@ -37,9 +42,9 @@ class ModuloContabilidad:
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #000; padding-bottom: 10px;">
                     <div style="width: 30%;">{logo_html}</div>
                     <div style="width: 70%; text-align: right; font-size: 9pt; line-height: 1.2;">
-                        <strong style="font-size: 12pt;">DANA INTERNACIONAL</strong><br>
-                        RUC: 12440-181-123510 DV83 | TEL: 446-1326<br>
-                        CALLE 15 & 16, ZONA LIBRE DE COLÓN, REP. DE PANAMÁ
+                        <strong style="font-size: 11pt;">SONIX LTD. #1</strong><br>
+                    RUC: 1570526-1-660611 DV80 | TEL: (507) 6239-7128 <br>
+                    LOTE 1, DE LA MANZANA 26-A, AVE. SAN ELADIO CALLE 17 ,ZONA LIBRE DE COLÓN , REPÚBLICA PANAMÁ. 
                     </div>
                 </div>
                 <div style="text-align: center; margin: 15px 0;">
@@ -49,7 +54,7 @@ class ModuloContabilidad:
                 <div style="text-align: center; background: #eee; padding: 3px; font-weight: bold; font-size: 8pt; margin-bottom: 15px;">{tipo}</div>
                 <table style="width: 100%; font-size: 10pt; border-collapse: collapse;">
                     <tr><td style="padding: 5px; border-bottom: 1px solid #ddd;"><strong>FECHA:</strong> {fecha}</td></tr>
-                    <tr><td style="padding: 5px; border-bottom: 1px solid #ddd;"><strong>SUJETO / REF:</strong> {sujeto.upper()}</td></tr>
+                    <tr><td style="padding: 5px; border-bottom: 1px solid #ddd;"><strong>SUJETO / REF:</strong> {str(sujeto).upper()}</td></tr>
                     <tr>
                         <td style="padding: 20px 5px; border-bottom: 1px solid #000;">
                             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -72,7 +77,10 @@ class ModuloContabilidad:
     def generar_informe_hoja_unica(self, titulo, datos, items_detalle=None):
         """Genera una plantilla de Reporte Ejecutivo formal con la lista explícita de documentos incluidos"""
         logo_b64 = self.get_image_base64(self.logo_path)
-        fecha = datos.get('fecha')[:10] if datos.get('fecha') else pd.Timestamp.now().strftime("%Y-%m-%d")
+        
+        fecha_raw = datos.get('fecha')
+        fecha = fecha_raw[:10] if isinstance(fecha_raw, str) else pd.Timestamp.now().strftime("%Y-%m-%d")
+        
         folio = datos.get('id', '000')
         origen = datos.get('cliente') or "Departamento de Contabilidad"
         monto = float(datos.get('total') or 0)
@@ -81,24 +89,21 @@ class ModuloContabilidad:
         nombre_descarga = f"{titulo.replace(' ', '_')}_{fecha}"
         logo_html = f'<img src="data:image/png;base64,{logo_b64}" style="max-height: 55px;">' if logo_b64 else ""
 
-        # Construcción dinámica de las filas de la lista de documentos
         tabla_items_html = ""
         if items_detalle and len(items_detalle) > 0:
             filas_html = ""
             for item in items_detalle:
-                # Normalización de campos según el tipo de documento
                 doc_id = item.get('id', 'S/N')
-                doc_fecha = item.get('fecha', '')[:10]
+                doc_fecha_raw = item.get('fecha', '')
+                doc_fecha = doc_fecha_raw[:10] if isinstance(doc_fecha_raw, str) else ''
                 
-                # Sujeto o entidad involucrada
                 doc_sujeto = item.get('cliente') or item.get('banco') or item.get('descripcion') or 'GENERAL'
-                if len(doc_sujeto) > 30:
-                    doc_sujeto = doc_sujeto[:28] + ".."
+                if len(str(doc_sujeto)) > 30:
+                    doc_sujeto = str(doc_sujeto)[:28] + ".."
                 
-                # Referencia o concepto corto
                 doc_ref = item.get('referencia') or item.get('metodo_pago') or item.get('descripcion') or 'Registro'
-                if len(doc_ref) > 35:
-                    doc_ref = doc_ref[:33] + ".."
+                if len(str(doc_ref)) > 35:
+                    doc_ref = str(doc_ref)[:33] + ".."
                     
                 doc_monto = float(item.get('total') or item.get('monto') or 0)
 
@@ -157,9 +162,9 @@ class ModuloContabilidad:
                 <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 3px solid #1a365d; padding-bottom: 12px; margin-bottom: 20px;">
                     <div style="width: 40%; text-align: left;">{logo_html}</div>
                     <div style="width: 60%; text-align: right; font-size: 8.5pt; color: #555;">
-                        <strong style="font-size: 13pt; color: #1a365d;">DANA INTERNACIONAL, S.A.</strong><br>
-                        RUC: 12440-181-123510 DV83 | Teléfono: 446-1326<br>
-                        Calle 15 & 16, Zona Libre de Colón, Rep. de Panamá
+                        <strong style="font-size: 11pt;">SONIX LTD. #1</strong><br>
+                    RUC: 1570526-1-660611 DV80 | TEL: (507) 6239-7128 <br>
+                    LOTE 1, DE LA MANZANA 26-A, AVE. SAN ELADIO CALLE 17 ,ZONA LIBRE DE COLÓN , REPÚBLICA PANAMÁ. 
                     </div>
                 </div>
                 
@@ -179,7 +184,7 @@ class ModuloContabilidad:
                     </tr>
                     <tr style="background-color: #f7fafc;">
                         <td style="padding: 8px; border: 1px solid #e2e8f0;"><strong>ÁREA / DEPARTAMENTO:</strong></td>
-                        <td style="padding: 8px; border: 1px solid #e2e8f0;">{origen.upper()}</td>
+                        <td style="padding: 8px; border: 1px solid #e2e8f0;">{str(origen).upper()}</td>
                     </tr>
                     <tr>
                         <td style="padding: 8px; border: 1px solid #e2e8f0; vertical-align: top;"><strong>DESCRIPCIÓN:</strong></td>
@@ -196,7 +201,7 @@ class ModuloContabilidad:
 
                 <div style="display: flex; justify-content: space-between; margin-top: 45px; padding: 0 20px;">
                     <div style="width: 40%; border-top: 1.5px solid #a0aec0; text-align: center; font-size: 8.5pt; color: #4a5568; padding-top: 8px;">
-                        <strong>Firma de Auditoría / Caja</strong><br>DANA INTERNACIONAL
+                        <strong>Firma de Auditoría / Caja</strong><br>SONIX LTD. #1
                     </div>
                     <div style="width: 40%; border-top: 1.5px solid #a0aec0; text-align: center; font-size: 8.5pt; color: #4a5568; padding-top: 8px;">
                         <strong>Recibido Administración</strong><br>Control Interno
@@ -219,26 +224,39 @@ class ModuloContabilidad:
         return html_content
 
     def eliminar_factura(self, factura):
-        """Elimina la factura y devuelve el stock a productos"""
+        """Elimina la factura y devuelve el stock a productos (Migrado a Local SQLite)"""
         try:
+            # Reconstruir o extraer los ítems guardados en la factura si vienen serializados
             detalle = factura.get('detalle', [])
+            if isinstance(detalle, str):
+                import json
+                try: detalle = json.loads(detalle)
+                except: detalle = []
+
             for item in detalle:
-                res = self.db.client.table("productos").select("CANTIDAD").eq("REFERENCIA", item['id']).execute()
-                if res.data:
-                    nueva_q = int(res.data[0]['CANTIDAD']) + int(item['cantidad'])
-                    self.db.client.table("productos").update({"CANTIDAD": nueva_q}).eq("REFERENCIA", item['id']).execute()
+                # Consulta limpia emulando local sin cloud helpers
+                res = self.db.ejecutar_consulta_sqlite_local("SELECT CANTIDAD FROM productos WHERE REFERENCIA = ?", (item['id'],))
+                if res:
+                    nueva_q = int(res[0]['cantidad']) + int(item['cantidad'])
+                    self.db.ejecutar_consulta_sqlite_local("UPDATE productos SET CANTIDAD = ? WHERE REFERENCIA = ?", (nueva_q, item['id']))
             
-            self.db.client.table("recibos").delete().eq("id_venta", factura['id']).execute()
-            self.db.client.table("ventas").delete().eq("id", factura['id']).execute()
-            st.success(f"Factura #{factura['id']} eliminada y stock restaurado.")
+            # Borrados locales limpios
+            self.db.ejecutar_consulta_sqlite_local("DELETE FROM recibos WHERE id_venta = ?", (factura['id'],))
+            self.db.ejecutar_consulta_sqlite_local("DELETE FROM ventas WHERE id = ?", (factura['id'],))
+            st.success(f"Factura #{factura['id']} eliminada y stock restaurado en la base local.")
             st.rerun()
         except Exception as e:
-            st.error(f"Error al eliminar: {e}")
+            st.error(f"Error al eliminar factura localmente: {e}")
 
     def render(self):
         st.header("📊 Contabilidad y Finanzas")
         
-        # 1. CARGA DE DATOS
+        # Evaluación de los permisos centralizados para el módulo contable
+        puede_ingresar = check_permiso("ingresar")
+        puede_modificar = check_permiso("modificar")
+        puede_eliminar = check_permiso("eliminar")
+
+        # 1. CARGA DE DATOS LOCALES
         ventas = self.db.fetch("ventas") or []
         recibos = self.db.fetch("recibos") or []
         gastos = self.db.fetch("gastos") or []
@@ -249,7 +267,7 @@ class ModuloContabilidad:
         t_gastos = sum(g.get('monto', 0) for g in gastos)
         
         c1, c2, c3 = st.columns(3)
-        c1.metric("Ventas Totales Historicas", f"${t_ingresos:,.2f}")
+        c1.metric("Ventas Totales Históricas", f"${t_ingresos:,.2f}")
         c2.metric("Gastos Totales", f"${t_gastos:,.2f}", delta_color="inverse")
         c3.metric("Utilidad Bruta", f"${(t_ingresos - t_gastos):,.2f}")
 
@@ -280,30 +298,41 @@ class ModuloContabilidad:
                 m, d = st.columns([1,2])
                 monto_g = m.number_input("Monto $", min_value=0.0, format="%.2f")
                 desc_g = d.text_input("Descripción")
-                if st.form_submit_button("💾 Guardar Gasto"):
+                
+                btn_gasto = st.form_submit_button("💾 Guardar Gasto", disabled=not puede_ingresar)
+                if btn_gasto and puede_ingresar:
                     self.db.insert("gastos", {"monto": monto_g, "descripcion": desc_g.upper(), "fecha": pd.Timestamp.now().isoformat()})
                     st.rerun()
+                    
             for g in gastos:
                 with st.container(border=True):
                     c1, c2 = st.columns([5, 1])
-                    c1.write(f"📅 {g.get('fecha')[:10]} | **{g.get('descripcion')}** | ${g.get('monto'):.2f}")
-                    if c2.button("🖨️", key=f"pg_{g['id']}"):
+                    fecha_g = g.get('fecha')[:10] if g.get('fecha') else "S/F"
+                    c1.write(f"📅 {fecha_g} | **{g.get('descripcion')}** | ${g.get('monto'):.2f}")
+                    
+                    if c2.button("🖨️", key=f"pg_{g['id']}", disabled=not puede_modificar):
                         st.session_state.print_html = self.generar_formato_impresion("COMPROBANTE DE GASTO", g)
+                        st.rerun()
 
         with tabs[1]: # DEPÓSITOS
             with st.form("f_d"):
                 b = st.selectbox("Banco", ["Banco General", "Banistmo", "BAC", "Global Bank", "Otro"])
                 m = st.number_input("Monto $", min_value=0.0, format="%.2f")
                 r = st.text_input("Referencia")
-                if st.form_submit_button("💾 Guardar Depósito"):
+                
+                btn_deposito = st.form_submit_button("💾 Guardar Depósito", disabled=not puede_ingresar)
+                if btn_deposito and puede_ingresar:
                     self.db.insert("depositos", {"banco": b, "monto": m, "referencia": r.upper(), "fecha": pd.Timestamp.now().isoformat()})
                     st.rerun()
+                    
             for d in depositos:
                 with st.container(border=True):
                     c1, c2 = st.columns([5, 1])
                     c1.write(f"🏦 {d.get('banco')} | Ref: {d.get('referencia')} | ${d.get('monto'):.2f}")
-                    if c2.button("🖨️", key=f"pd_{d['id']}"):
+                    
+                    if c2.button("🖨️", key=f"pd_{d['id']}", disabled=not puede_modificar):
                         st.session_state.print_html = self.generar_formato_impresion("COMPROBANTE DE DEPÓSITO", d)
+                        st.rerun()
 
         with tabs[2]: # RECIBOS
             if ventas:
@@ -316,15 +345,19 @@ class ModuloContabilidad:
                         f_sel = df_v_rec.iloc[idx]
                         m_rec = st.number_input("Monto Recibido $", value=float(f_sel['total']), format="%.2f")
                         met = st.selectbox("Método", ["Efectivo", "ACH", "Yappy", "Cheque"])
-                        if st.form_submit_button("✅ Procesar Recibo"):
+                        
+                        btn_recibo = st.form_submit_button("✅ Procesar Recibo", disabled=not puede_ingresar)
+                        if btn_recibo and puede_ingresar:
                             self.db.insert("recibos", {"cliente": f_sel['cliente'].upper(), "monto": m_rec, "metodo_pago": met, "id_venta": int(f_sel['id']), "fecha": pd.Timestamp.now().isoformat()})
                             st.rerun()
             for r in recibos:
                 with st.container(border=True):
                     c1, c2 = st.columns([5, 1])
                     c1.write(f"📄 Recibo #{r['id']} | {r.get('cliente')} | ${r.get('monto'):.2f}")
-                    if c2.button("🖨️", key=f"pr_{r['id']}"):
+                    
+                    if c2.button("🖨️", key=f"pr_{r['id']}", disabled=not puede_modificar):
                         st.session_state.print_html = self.generar_formato_impresion("RECIBO DE CAJA", r)
+                        st.rerun()
 
         with tabs[3]: # HISTORIAL FACTURAS
             if ventas:
@@ -332,15 +365,20 @@ class ModuloContabilidad:
                 for v in reversed(ventas):
                     if bus in str(v['id']) or bus in v['cliente'].lower():
                         with st.container(border=True):
-                            c1, c2, c3 = st.columns([3, 1, 1])
-                            c1.write(f"🧾 Factura #{v['id']} | **{v['cliente']}**")
-                            c1.caption(f"Total: ${v['total']:.2f} | Fecha: {v['fecha'][:10]}")
+                            columnas = [3, 1, 1] if puede_eliminar else [4, 1]
+                            cols_f = st.columns(columnas)
                             
-                            if c2.button("🖨️ Reimprimir", key=f"reim_{v['id']}"):
+                            cols_f[0].write(f"🧾 Factura #{v['id']} | **{v['cliente']}**")
+                            fecha_v = v['fecha'][:10] if v.get('fecha') else "S/F"
+                            cols_f[0].caption(f"Total: ${v['total']:.2f} | Fecha: {fecha_v}")
+                            
+                            if cols_f[1].button("🖨️ Reimprimir", key=f"reim_{v['id']}", disabled=not puede_modificar):
                                 st.session_state.print_html = self.generar_formato_impresion("FACTURA DE VENTA", v)
+                                st.rerun()
                             
-                            if c3.button("🗑️ Eliminar", key=f"del_{v['id']}", type="secondary"):
-                                self.eliminar_factura(v)
+                            if puede_eliminar:
+                                if cols_f[2].button("🗑️ Eliminar", key=f"del_{v['id']}", type="secondary"):
+                                    self.eliminar_factura(v)
 
         with tabs[4]: # 🔒 CIERRE E INFORMES
             st.subheader("🔒 Centro de Cierre Operativo")
@@ -352,7 +390,7 @@ class ModuloContabilidad:
 
             for df in [df_v, df_r, df_g, df_d]:
                 if not df.empty and 'fecha' in df.columns:
-                    df['fecha_dt'] = pd.to_datetime(df['fecha'])
+                    df['fecha_dt'] = pd.to_datetime(df['fecha'], errors='coerce')
                     df['fecha_dia'] = df['fecha_dt'].dt.strftime('%Y-%m-%d')
                     df['fecha_mes'] = df['fecha_dt'].dt.strftime('%Y-%m')
                 else:
@@ -368,7 +406,6 @@ class ModuloContabilidad:
                 if todos_dias:
                     dia_sel = st.selectbox("Seleccione Día para Reportar", todos_dias, key="sel_dia_u")
                     
-                    # Filtrados inmediatos del día (DataFrames completos para extraer registros)
                     items_v_d = df_v[df_v['fecha_dia'] == dia_sel] if not df_v.empty else pd.DataFrame()
                     items_r_d = df_r[df_r['fecha_dia'] == dia_sel] if not df_r.empty else pd.DataFrame()
                     items_g_d = df_g[df_g['fecha_dia'] == dia_sel] if not df_g.empty else pd.DataFrame()
@@ -389,30 +426,34 @@ class ModuloContabilidad:
                     st.write("#### Acciones de Impresión (Informe Corporativo con Lista de Documentos)")
                     
                     col_b1, col_b2, col_b3, col_b4 = st.columns(4)
-                    if col_b1.button("🖨️ Informe Ventas", key="p_v_d"):
+                    if col_b1.button("🖨️ Informe Ventas", key="p_v_d", disabled=not puede_modificar):
                         st.session_state.print_html = self.generar_informe_hoja_unica(
                             "INFORME DE VENTA DIARIA", 
                             {"id": f"V-{dia_sel.replace('-','')}", "fecha": dia_sel, "cliente": "Caja General de Ventas", "total": v_d, "nota": "Consolidado fiscal y arqueo general diario de facturación."},
                             items_v_d.to_dict('records') if not items_v_d.empty else None
                         )
-                    if col_b2.button("🖨️ Informe Recibos", key="p_r_d"):
+                        st.rerun()
+                    if col_b2.button("🖨️ Informe Recibos", key="p_r_d", disabled=not puede_modificar):
                         st.session_state.print_html = self.generar_informe_hoja_unica(
                             "INFORME DE RECIBOS DE CAJA", 
-                            {"id": f"R-{dia_sel.replace('-','')}", "fecha": dia_sel, "cliente": "Caja General de Cobros", "total": r_d, "nota": "Consolidado resumido de ingresos por cobros ejecutados en el día."},
+                            {"id": f"R-{dia_sel.replace('-','')}", "fecha": dia_sel, "cliente": "Caja General de Cobros", "total": r_d, "nota": "Consolidado resumido de ingresos por cobros ejecutados in el día."},
                             items_r_d.to_dict('records') if not items_r_d.empty else None
                         )
-                    if col_b3.button("🖨️ Informe Gastos", key="p_g_d"):
+                        st.rerun()
+                    if col_b3.button("🖨️ Informe Gastos", key="p_g_d", disabled=not puede_modificar):
                         st.session_state.print_html = self.generar_informe_hoja_unica(
                             "INFORME DIARIO DE GASTOS", 
                             {"id": f"G-{dia_sel.replace('-','')}", "fecha": dia_sel, "cliente": "Egresos de Caja Chica", "total": g_d, "nota": "Consolidado resumido de salidas y gastos operativos autorizados."},
                             items_g_d.to_dict('records') if not items_g_d.empty else None
                         )
-                    if col_b4.button("🖨️ Informe Depósitos", key="p_d_d"):
+                        st.rerun()
+                    if col_b4.button("🖨️ Informe Depósitos", key="p_d_d", disabled=not puede_modificar):
                         st.session_state.print_html = self.generar_informe_hoja_unica(
                             "INFORME DE DEPÓSITOS BANCARIOS", 
                             {"id": f"D-{dia_sel.replace('-','')}", "fecha": dia_sel, "cliente": "Tesorería / Conciliación Bancaria", "total": d_d, "nota": "Consolidado y arqueo diario de fondos asegurados vía ACH/Depósitos."},
                             items_d_d.to_dict('records') if not items_d_d.empty else None
                         )
+                        st.rerun()
                 else:
                     st.info("No se hallaron transacciones diarias.")
 
@@ -420,7 +461,6 @@ class ModuloContabilidad:
                 if todos_meses:
                     mes_sel = st.selectbox("Seleccione Mes para Reportar", todos_meses, key="sel_mes_u")
                     
-                    # Filtrados inmediatos del mes
                     items_v_m = df_v[df_v['fecha_mes'] == mes_sel] if not df_v.empty else pd.DataFrame()
                     items_r_m = df_r[df_r['fecha_mes'] == mes_sel] if not df_r.empty else pd.DataFrame()
                     items_g_m = df_g[df_g['fecha_mes'] == mes_sel] if not df_g.empty else pd.DataFrame()
@@ -441,34 +481,40 @@ class ModuloContabilidad:
                     st.write("#### Acciones de Impresión Mensual (Informe Corporativo con Lista de Documentos)")
                     
                     col_bm1, col_bm2, col_bm3, col_bm4 = st.columns(4)
-                    if col_bm1.button("🖨️ Reporte Ventas", key="p_v_m"):
+                    if col_bm1.button("🖨️ Reporte Ventas", key="p_v_m", disabled=not puede_modificar):
                         st.session_state.print_html = self.generar_informe_hoja_unica(
                             "INFORME MENSUAL DE VENTAS", 
-                            {"id": f"MV-{mes_sel.replace('-','')}", "fecha": f"{mes_sel}-01", "cliente": "Auditoría de Ventas Corporativas", "total": v_m, "nota": f"Informe gerencial analítico de facturación total del periodo fiscal: {mes_sel}."},
+                            {"id": f"MV-{mes_sel.replace('-','')}", "fecha": f"{mes_sel}-01", "cliente": "Auditoría de Ventas Corporativas", "total": v_m, "nota": f"Informe gerencial analítico de facturación total del período fiscal: {mes_sel}."},
                             items_v_m.to_dict('records') if not items_v_m.empty else None
                         )
-                    if col_bm2.button("🖨️ Reporte Recibos", key="p_r_m"):
+                        st.rerun()
+                    if col_bm2.button("🖨️ Reporte Recibos", key="p_r_m", disabled=not puede_modificar):
                         st.session_state.print_html = self.generar_informe_hoja_unica(
                             "INFORME MENSUAL DE RECAUDACIÓN", 
                             {"id": f"MR-{mes_sel.replace('-','')}", "fecha": f"{mes_sel}-01", "cliente": "Administración de Cartera / Cobros", "total": r_m, "nota": f"Informe analítico de ingresos reales a caja: {mes_sel}."},
                             items_r_m.to_dict('records') if not items_r_m.empty else None
                         )
-                    if col_bm3.button("🖨️ Reporte Gastos", key="p_g_m"):
+                        st.rerun()
+                    if col_bm3.button("🖨️ Reporte Gastos", key="p_g_m", disabled=not puede_modificar):
                         st.session_state.print_html = self.generar_informe_hoja_unica(
                             "INFORME MENSUAL DE EGRESOS", 
                             {"id": f"MG-{mes_sel.replace('-','')}", "fecha": f"{mes_sel}-01", "cliente": "Administración / Control de Costos", "total": g_m, "nota": f"Análisis general de egresos e inversiones liquidadas durante el mes: {mes_sel}."},
                             items_g_m.to_dict('records') if not items_g_m.empty else None
                         )
-                    if col_bm4.button("🖨️ Reporte Depósitos", key="p_d_m"):
+                        st.rerun()
+                    if col_bm4.button("🖨️ Reporte Depósitos", key="p_d_m", disabled=not puede_modificar):
                         st.session_state.print_html = self.generar_informe_hoja_unica(
                             "INFORME MENSUAL DE DEPÓSITOS", 
-                            {"id": f"MD-{mes_sel.replace('-','')}", "fecha": f"{mes_sel}-01", "cliente": "Contabilidad General / Bancos", "total": d_m, "nota": f"Conciliación bancaria consolidada acumulada del periodo: {mes_sel}."},
+                            {"id": f"MD-{mes_sel.replace('-','')}", "fecha": f"{mes_sel}-01", "cliente": "Contabilidad General / Bancos", "total": d_m, "nota": f"Conciliación bancaria consolidada acumulada del período: {mes_sel}."},
                             items_d_m.to_dict('records') if not items_d_m.empty else None
                         )
+                        st.rerun()
                 else:
                     st.info("No se hallaron transacciones mensuales.")
 
-        # DISPARADOR DE IMPRESIÓN
-        if "print_html" in st.session_state:
-            components.html(st.session_state.print_html, height=0, width=0)
-            del st.session_state.print_html
+        # DISPARADOR DE IMPRESIÓN (Gestión limpia del ciclo de vida del iframe)
+        if "print_html" in st.session_state and st.session_state.print_html:
+            html_code = st.session_state.print_html
+            # Consumimos y limpiamos el estado preventivamente para que no repita el bucle de impresión en rerruns fútiles
+            st.session_state.print_html = None
+            components.html(html_code, height=0, width=0)
