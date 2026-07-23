@@ -8,8 +8,8 @@ class ModuloAdmin:
     def render(self):
         st.header("🛡️ Panel de Control Master IT")
         
-        # Pestañas para organizar la administración del sistema híbrido
-        tab1, tab2, tab3 = st.tabs(["👤 Gestión de Usuarios", "📜 Auditoría de Logs", "🔄 Sincronización Cloud"])
+        # Pestañas para organizar la administración
+        tab1, tab2 = st.tabs(["👤 Gestión de Usuarios", "📜 Auditoría de Logs"])
 
         with tab1:
             st.subheader("Agregar o Modificar Personal")
@@ -21,30 +21,24 @@ class ModuloAdmin:
                     
                     id_p = c1.number_input("ID del Perfil (0 para nuevo usuario)", min_value=0, step=1, help="Usa 0 para crear uno nuevo o el ID exacto para editar uno existente.")
                     usuario_n = c1.text_input("Nombre de Usuario / Login", placeholder="ej. jsmith")
-                    clave_n = c1.text_input("Contraseña de Acceso", type="password", placeholder="Dejar en blanco si solo editas el rol")
                     
-                    nombre_n = c2.text_input("Nombre Completo", placeholder="ej. John Smith")
+                    email_n = c2.text_input("Correo Electrónico", placeholder="empleado@cirpanama.com")
                     rol_n = c2.selectbox("Nivel de Acceso (Rol)", 
-                                       ["usuario", "supervisor", "administrador", "master_it"],
+                                       ["usuario", "supervisor", "administrador", "master it"],
                                        help="Usuario: Solo entrada. Supervisor: Modifica. Administrador: Borra. Master IT: Todo.")
                     
                     st.divider()
                     btn_guardar = st.form_submit_button("💾 Guardar Cambios en Perfil", use_container_width=True)
 
                     if btn_guardar:
-                        if not usuario_n or (id_p == 0 and not clave_n):
-                            st.error("Por favor completa los campos obligatorios (Usuario y Contraseña para nuevos).")
+                        if not usuario_n or not email_n:
+                            st.error("Por favor completa los campos de Usuario y Email.")
                         else:
-                            # Mapeo idéntico a las columnas estructurales de SQLite en main.py
                             datos_perfil = {
-                                "usuario": usuario_n.strip().lower(),
-                                "rol": rol_n,
-                                "nombre_completo": nombre_n.strip()
+                                "usuario": usuario_n,
+                                "email": email_n,
+                                "rol": rol_n
                             }
-                            
-                            # Solo actualizar o insertar clave si se escribe una nueva
-                            if clave_n:
-                                datos_perfil["clave"] = clave_n.strip()
                             
                             try:
                                 if id_p == 0:
@@ -55,59 +49,33 @@ class ModuloAdmin:
                                     st.success(f"✅ Perfil ID {id_p} actualizado correctamente.")
                                 st.rerun()
                             except Exception as e:
-                                st.error(f"Error al procesar la base de datos: {e}")
+                                st.error(f"Error al procesar: {e}")
 
             # Visualización de la tabla actual de perfiles
-            st.subheader("Usuarios Registrados en Base de Datos Local")
+            st.subheader("Usuarios Registrados")
             perfiles_data = self.db.fetch("perfiles")
             if perfiles_data:
                 df_perfiles = pd.DataFrame(perfiles_data)
-                
-                # Columnas alineadas con el esquema real de producción
-                cols = ['id', 'usuario', 'rol', 'nombre_completo']
-                cols_visibles = [c for c in cols if c in df_perfiles.columns]
-                
-                st.dataframe(df_perfiles[cols_visibles], 
+                # Reordenamos columnas para que sea fácil de leer
+                cols = ['id', 'usuario', 'rol', 'email', 'created_at']
+                st.dataframe(df_perfiles[[c for c in cols if c in df_perfiles.columns]], 
                              use_container_width=True, 
                              hide_index=True)
                 
-                # Opción rápida para eliminación 
+                # Opción rápida para eliminar (Solo para ti)
                 with st.expander("🗑️ Zona de Eliminación de Usuarios"):
                     id_borrar = st.number_input("ID a eliminar", min_value=1, step=1, key="del_user")
-                    if st.button("Confirmar Eliminación Temeraria", type="primary", use_container_width=True):
+                    if st.button("Confirmar Eliminación", type="primary"):
                         self.db.delete("perfiles", id_borrar)
-                        st.warning(f"Usuario con ID {id_borrar} eliminado físicamente de la base de datos local.")
+                        st.warning(f"Usuario con ID {id_borrar} eliminado.")
                         st.rerun()
             else:
-                st.info("No hay usuarios registrados aparte del administrador de rescate.")
+                st.info("No hay usuarios registrados aparte del Master.")
 
         with tab2:
-            st.subheader("Historial de Movimientos Locales")
+            st.subheader("Historial de Movimientos")
             logs = self.db.fetch("logs_sistema")
             if logs:
-                df_logs = pd.DataFrame(logs)
-                # Ordenar por ID descendente si existe la columna para ver lo más reciente primero
-                if "id" in df_logs.columns:
-                    df_logs = df_logs.sort_values(by="id", ascending=False)
-                st.dataframe(df_logs, use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(logs).sort_values(by="id", ascending=False), use_container_width=True)
             else:
-                st.write("No hay logs registrados todavía en el archivo db_sonix1.db.")
-
-        with tab3:
-            st.subheader("Pasarela de Sincronización desde la Nube")
-            st.info("Esta herramienta descargará la última información estructural y operativa desde Supabase para guardarla de forma local en este dispositivo.")
-            
-            with st.container(border=True):
-                st.markdown("### Ejecutar Clonación de Datos")
-                st.caption("Nota: Esto reescribirá las tablas locales con la data fresca de la nube.")
-                
-                if st.button("🔄 Forzar Descarga y Clonación desde Supabase", type="secondary", use_container_width=True):
-                    # Invoca de forma directa al método alojado en el SQLiteHelper de main.py
-                    if hasattr(self.db, "clonar_desde_supabase"):
-                        with st.spinner("Conectando y reconstruyendo almacenamiento local..."):
-                            exito = self.db.clonar_desde_supabase()
-                            if exito:
-                                st.balloons()
-                                st.rerun()
-                    else:
-                        st.error("El manejador de base de datos actual no tiene implementada la pasarela de clonación.")
+                st.write("No hay logs registrados todavía.")

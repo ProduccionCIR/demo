@@ -1,2 +1,2 @@
 # mi-inventario
-# Sistema en Producción de SONIX LTD.
+# Sistema en Producción de Dana Internacional 

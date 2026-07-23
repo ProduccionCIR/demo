@@ -1,7 +1,6 @@
-libglib2.0-dev
 libpango-1.0-0
-libpangocairo-1.0-0
-fontconfig
+libharfbuzz0b
+libpangoft2-1.0-0
 libgdk-pixbuf-2.0-0
 libffi-dev
 shared-mime-info
